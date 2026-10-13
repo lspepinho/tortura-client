@@ -19,6 +19,7 @@ import {
   updateProjectiles,
   updateHazards,
   checkFallAndBoundaries,
+  setDamageSlot,
 } from './game/physics';
 import { renderGame, updateCamera, Camera } from './game/renderer';
 import { BotAI } from './game/botAI';
@@ -360,6 +361,7 @@ export default function App() {
   useEffect(() => {
     let animId: number;
     const FIXED_STEP = 1000 / 60;
+    setDamageSlot(gameMode === 'online' ? onlineSlot : 'all');
     const loop = (now: number) => {
       const canvas = canvasRef.current;
       if (canvas) {
@@ -477,9 +479,7 @@ export default function App() {
                 theirs.aimAngle = snap.aimAngle;
                 theirs.state = snap.state;
                 theirs.isGrounded = snap.isGrounded;
-                if (Math.abs(theirs.health - snap.health) > 0.5) {
-                  theirs.health = snap.health;
-                }
+                theirs.health = snap.health;
               }
             }
             const p1Fell = checkFallAndBoundaries(p1, arena, addScreenShake, floatingTextsRef.current);

@@ -6,6 +6,13 @@ export const MOVE_SPEED = 3.2;
 export const JUMP_FORCE = -6.8;
 export const FIGHTER_WIDTH = 26;
 export const FIGHTER_HEIGHT = 58;
+let damageSlot: 1 | 2 | 'all' = 'all';
+export function setDamageSlot(s: 1 | 2 | 'all') {
+  damageSlot = s;
+}
+function canDamage(slot: 1 | 2) {
+  return damageSlot === 'all' || damageSlot === slot;
+}
 export function createFighter(
   slot: 1 | 2,
   characterId: 'arthur' | 'lucas',
@@ -95,14 +102,18 @@ export function updateFighter(
   if (fighter.status.radioactiveTimer > 0) {
     fighter.status.radioactiveTimer -= 1 / 60;
     if (Math.random() < 0.2) {
-      fighter.health = Math.max(0, fighter.health - 0.4);
+      if (canDamage(fighter.slot)) {
+        fighter.health = Math.max(0, fighter.health - 0.4);
+      }
       spawnParticle(particles, fighter.x + (Math.random() - 0.5) * 20, fighter.y - 30 + (Math.random() - 0.5) * 30, 0, -1, 4, '#22c55e', 0.8, 25);
     }
   }
   if (fighter.status.burnTimer > 0) {
     fighter.status.burnTimer -= 1 / 60;
     if (Math.random() < 0.2) {
-      fighter.health = Math.max(0, fighter.health - 0.5);
+      if (canDamage(fighter.slot)) {
+        fighter.health = Math.max(0, fighter.health - 0.5);
+      }
       spawnParticle(particles, fighter.x + (Math.random() - 0.5) * 20, fighter.y - 30 + (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 2, -2, 5, '#f97316', 0.8, 20);
     }
   }
@@ -851,8 +862,10 @@ export function updateHazards(
         f.y > haz.y &&
         f.y - 50 < haz.y + haz.height
       ) {
-        const dmg = haz.damagePerSec / 60;
-        f.health = Math.max(0, f.health - dmg);
+        if (canDamage(f.slot)) {
+          const dmg = haz.damagePerSec / 60;
+          f.health = Math.max(0, f.health - dmg);
+        }
         if (haz.type === 'fart_cloud') {
           f.status.burnTimer = 1.0;
         } else if (haz.type === 'radioactive_pool') {
@@ -927,7 +940,9 @@ export function applyDamage(
   particles: Particle[]
 ) {
   const knockMod = victim.character === 'arthur' ? 0.85 : 1.0;
-  victim.health = Math.max(0, victim.health - amount);
+  if (canDamage(victim.slot)) {
+    victim.health = Math.max(0, victim.health - amount);
+  }
   victim.vx = knockX * knockMod;
   victim.vy = knockY * knockMod;
   victim.state = 'hit';
@@ -940,7 +955,7 @@ export function applyDamage(
   for (let i = 0; i < 10; i++) {
     spawnParticle(particles, victim.x, victim.y - 25, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 5, '#fbbf24', 0.9, 22);
   }
-  if (victim.health <= 0) {
+  if (victim.health <= 0 && canDamage(victim.slot)) {
     victim.state = 'dead';
     victim.ragdollIntensity = 1.0;
     victim.angularVelocity *= 1.5;
@@ -954,6 +969,7 @@ export function checkFallAndBoundaries(
   floatingTexts: FloatingText[]
 ): boolean {
   if (fighter.state === 'dead') return true;
+  if (!canDamage(fighter.slot)) return false;
   if (arena.hasLavaBottom && fighter.y > arena.lavaY) {
     fighter.health = 0;
     fighter.state = 'dead';
