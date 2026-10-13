@@ -484,7 +484,6 @@ export default function App() {
             }
             const p1Fell = checkFallAndBoundaries(p1, arena, addScreenShake, floatingTextsRef.current);
             const p2Fell = checkFallAndBoundaries(p2, arena, addScreenShake, floatingTextsRef.current);
-            const p2Fell = checkFallAndBoundaries(p2, arena, addScreenShake, floatingTextsRef.current);
             if ((p1.health <= 0 || p1Fell || p2.health <= 0 || p2Fell) && gameState === 'playing') {
               handleRoundFinish(p1.health <= 0 || p1Fell ? 2 : 1);
             }
