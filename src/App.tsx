@@ -76,6 +76,12 @@ export default function App() {
   const lastSnapshotSentRef = useRef<number>(0);
   const physAccumRef = useRef<number>(0);
   const lastFrameTimeRef = useRef<number>(0);
+  const sessionRef = useRef<{ code: string | null; name: string; character: 'arthur' | 'lucas'; slot: 1 | 2 }>({
+    code: null,
+    name: '',
+    character: 'arthur',
+    slot: 1,
+  });
   const p1Ref = useRef<Fighter>(createFighter(1, 'arthur', 'Arthur', ARENAS[0].spawnP1));
   const p2Ref = useRef<Fighter>(createFighter(2, 'lucas', 'Lucas', ARENAS[0].spawnP2));
   const projectilesRef = useRef<Projectile[]>([]);
@@ -139,15 +145,44 @@ export default function App() {
       timeout: 10000,
     });
     socketRef.current = socket;
+    let firstConnect = true;
     socket.on('connect', () => {
       setSocketId(socket.id || null);
+      const sess = sessionRef.current;
+      if (!firstConnect && sess.code) {
+        socket.timeout(10000).emit(
+          'join_room',
+          { code: sess.code, playerName: sess.name, character: sess.character, claimSlot: sess.slot },
+          (err: unknown, res: any) => {
+            if (!err && res?.success) {
+              setRoomData(res.room);
+              if (socket.id && res.room.players[socket.id]) {
+                setOnlineSlot(res.room.players[socket.id].slot);
+              }
+            } else if (!err && res && res.success === false) {
+              sessionRef.current = { code: null, name: '', character: 'arthur', slot: 1 };
+              setLobbyError(res.error || 'Sala perdida. Entre de novo.');
+              setIsLobbyOpen(true);
+            }
+          }
+        );
+      }
+      firstConnect = false;
     });
     socket.on('connect_error', () => {});
     socket.on('disconnect', () => {});
     socket.on('room_updated', (room) => {
       setRoomData(room);
       if (socket.id && room.players[socket.id]) {
-        setOnlineSlot(room.players[socket.id].slot);
+        const slot = room.players[socket.id].slot;
+        setOnlineSlot(slot);
+        const prev = sessionRef.current;
+        sessionRef.current = {
+          code: room.code || prev.code,
+          name: room.players[socket.id].name || prev.name,
+          character: room.players[socket.id].character || prev.character,
+          slot,
+        };
       }
     });
     socket.on('start_char_selection', ({ round: nextRound }) => {
@@ -581,6 +616,7 @@ export default function App() {
         if (res.success) {
           setRoomData(res.room);
           setOnlineSlot(1);
+          sessionRef.current = { code: res.room.code, name: playerName, character: p1Char, slot: 1 };
         } else {
           setLobbyError(res.error || 'Erro ao criar sala');
         }
@@ -596,6 +632,7 @@ export default function App() {
         if (res.success) {
           setRoomData(res.room);
           setOnlineSlot(2);
+          sessionRef.current = { code: res.room.code, name: playerName, character: p2Char, slot: 2 };
         } else {
           setLobbyError(res.error || 'Erro ao entrar na sala');
         }
