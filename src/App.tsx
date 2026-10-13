@@ -115,12 +115,18 @@ export default function App() {
   useEffect(() => {
     const socket = io(import.meta.env.VITE_SERVER_URL || window.location.origin, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
     });
     socketRef.current = socket;
     socket.on('connect', () => {
       setSocketId(socket.id || null);
     });
+    socket.on('connect_error', () => {});
+    socket.on('disconnect', () => {});
     socket.on('room_updated', (room) => {
       setRoomData(room);
       if (socket.id && room.players[socket.id]) {
@@ -460,11 +466,31 @@ export default function App() {
     }
     startCountdown(mapIndex, c1, finalP2);
   };
+  const emitWithRetry = useCallback((event: string, payload: unknown, onAck: (res: any) => void, retries = 10) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    let attempts = 0;
+    const send = () => {
+      attempts += 1;
+      try {
+        socket.timeout(10000).emit(event, payload, (err: unknown, res: any) => {
+          if (err) {
+            if (attempts < retries) setTimeout(send, 2000);
+            return;
+          }
+          onAck(res);
+        });
+      } catch {
+        if (attempts < retries) setTimeout(send, 2000);
+      }
+    };
+    send();
+  }, []);
   const handleCreateRoom = (playerName: string, roundsMax: number, selectedMap: number) => {
     setMaxRounds(roundsMax);
     setMapIndex(selectedMap);
     setLobbyError(null);
-    socketRef.current?.emit(
+    emitWithRetry(
       'create_room',
       { playerName, character: p1Char },
       (res: { success: boolean; room?: any; error?: string }) => {
@@ -479,7 +505,7 @@ export default function App() {
   };
   const handleJoinRoom = (code: string, playerName: string) => {
     setLobbyError(null);
-    socketRef.current?.emit(
+    emitWithRetry(
       'join_room',
       { code, playerName, character: p2Char },
       (res: { success: boolean; room?: any; error?: string }) => {
