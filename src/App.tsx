@@ -59,6 +59,22 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const botAiRef = useRef<BotAI>(new BotAI());
+  const remoteSnapshotRef = useRef<{
+    slot: 1 | 2;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    bodyAngle: number;
+    facing: 1 | -1;
+    aimAngle: number;
+    health: number;
+    state: Fighter['state'];
+    isGrounded: boolean;
+  } | null>(null);
+  const lastSnapshotSentRef = useRef<number>(0);
+  const physAccumRef = useRef<number>(0);
+  const lastFrameTimeRef = useRef<number>(0);
   const p1Ref = useRef<Fighter>(createFighter(1, 'arthur', 'Arthur', ARENAS[0].spawnP1));
   const p2Ref = useRef<Fighter>(createFighter(2, 'lucas', 'Lucas', ARENAS[0].spawnP2));
   const projectilesRef = useRef<Projectile[]>([]);
@@ -140,6 +156,7 @@ export default function App() {
       setIsLobbyOpen(false);
     });
     socket.on('round_start', ({ round: nextRound, mapIndex: nextMap, players }) => {
+      remoteSnapshotRef.current = null;
       setRound(nextRound);
       setMapIndex(nextMap);
       const playerList = Object.values(players) as any[];
@@ -155,6 +172,9 @@ export default function App() {
       } else if (data.slot === 2) {
         p2InputRef.current = data.input;
       }
+    });
+    socket.on('remote_fighter_snapshot', (snap) => {
+      remoteSnapshotRef.current = snap;
     });
     socket.on('round_end', ({ winnerSlot, room }) => {
       setRoundWinnerSlot(winnerSlot);
@@ -310,6 +330,8 @@ export default function App() {
     const p2Name = gameMode === 'solo'
       ? `${finalChar2 === 'arthur' ? 'Arthur' : 'Lucas'} (Bot)`
       : (finalChar2 === 'arthur' ? 'Arthur' : 'Lucas');
+    remoteSnapshotRef.current = null;
+    physAccumRef.current = 0;
     p1Ref.current = createFighter(1, char1, p1Name, arena.spawnP1);
     p2Ref.current = createFighter(2, finalChar2, p2Name, arena.spawnP2);
     projectilesRef.current = [];
@@ -337,7 +359,8 @@ export default function App() {
   };
   useEffect(() => {
     let animId: number;
-    const loop = () => {
+    const FIXED_STEP = 1000 / 60;
+    const loop = (now: number) => {
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -359,46 +382,108 @@ export default function App() {
               const botInput = botAiRef.current.update(p2, p1, arena.platforms, aiDifficulty);
               p2InputRef.current = botInput;
             }
-            updateFighter(
-              p1,
-              p1InputRef.current,
-              arena.platforms,
-              p2,
-              projectilesRef.current,
-              hazardsRef.current,
-              particlesRef.current,
-              floatingTextsRef.current,
-              addScreenShake
-            );
-            updateFighter(
-              p2,
-              p2InputRef.current,
-              arena.platforms,
-              p1,
-              projectilesRef.current,
-              hazardsRef.current,
-              particlesRef.current,
-              floatingTextsRef.current,
-              addScreenShake
-            );
-            updateProjectiles(
-              projectilesRef.current,
-              arena.platforms,
-              p1,
-              p2,
-              hazardsRef.current,
-              particlesRef.current,
-              floatingTextsRef.current,
-              addScreenShake
-            );
-            updateHazards(
-              hazardsRef.current,
-              p1,
-              p2,
-              floatingTextsRef.current,
-              particlesRef.current
-            );
+            if (lastFrameTimeRef.current === 0) lastFrameTimeRef.current = now;
+            let frameDt = now - lastFrameTimeRef.current;
+            lastFrameTimeRef.current = now;
+            if (frameDt > 250) frameDt = 250;
+            if (frameDt < 0) frameDt = 0;
+            physAccumRef.current += frameDt;
+            let steps = 0;
+            const stepPhysics = () => {
+              updateFighter(
+                p1,
+                p1InputRef.current,
+                arena.platforms,
+                p2,
+                projectilesRef.current,
+                hazardsRef.current,
+                particlesRef.current,
+                floatingTextsRef.current,
+                addScreenShake
+              );
+              updateFighter(
+                p2,
+                p2InputRef.current,
+                arena.platforms,
+                p1,
+                projectilesRef.current,
+                hazardsRef.current,
+                particlesRef.current,
+                floatingTextsRef.current,
+                addScreenShake
+              );
+              updateProjectiles(
+                projectilesRef.current,
+                arena.platforms,
+                p1,
+                p2,
+                hazardsRef.current,
+                particlesRef.current,
+                floatingTextsRef.current,
+                addScreenShake
+              );
+              updateHazards(
+                hazardsRef.current,
+                p1,
+                p2,
+                floatingTextsRef.current,
+                particlesRef.current
+              );
+            };
+            while (physAccumRef.current >= FIXED_STEP && steps < 4) {
+              stepPhysics();
+              physAccumRef.current -= FIXED_STEP;
+              steps += 1;
+            }
+            if (steps === 4) physAccumRef.current = 0;
+            if (gameMode === 'online') {
+              const mine = onlineSlot === 1 ? p1 : p2;
+              const theirs = onlineSlot === 1 ? p2 : p1;
+              if (now - lastSnapshotSentRef.current > 100) {
+                lastSnapshotSentRef.current = now;
+                socketRef.current?.emit('fighter_snapshot', {
+                  slot: onlineSlot,
+                  x: mine.x,
+                  y: mine.y,
+                  vx: mine.vx,
+                  vy: mine.vy,
+                  bodyAngle: mine.bodyAngle,
+                  facing: mine.facing,
+                  aimAngle: mine.aimAngle,
+                  health: mine.health,
+                  state: mine.state,
+                  isGrounded: mine.isGrounded,
+                });
+              }
+              const snap = remoteSnapshotRef.current;
+              if (snap && snap.slot !== onlineSlot) {
+                const dx = snap.x - theirs.x;
+                const dy = snap.y - theirs.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 220) {
+                  theirs.x = snap.x;
+                  theirs.y = snap.y;
+                  theirs.vx = snap.vx;
+                  theirs.vy = snap.vy;
+                } else if (dist > 0.5) {
+                  const t = Math.min(1, dist / 60);
+                  theirs.x += dx * t;
+                  theirs.y += dy * t;
+                  theirs.vx = snap.vx;
+                  theirs.vy = snap.vy;
+                }
+                theirs.bodyAngle = snap.bodyAngle;
+                theirs.facing = snap.facing;
+                theirs.aimAngle = snap.aimAngle;
+                theirs.state = snap.state;
+                theirs.isGrounded = snap.isGrounded;
+                if (Math.abs(theirs.health - snap.health) > 0.5) {
+                  theirs.health = snap.health;
+                }
+              }
+            }
             const p1Fell = checkFallAndBoundaries(p1, arena, addScreenShake, floatingTextsRef.current);
+            const p2Fell = checkFallAndBoundaries(p2, arena, addScreenShake, floatingTextsRef.current);
             const p2Fell = checkFallAndBoundaries(p2, arena, addScreenShake, floatingTextsRef.current);
             if ((p1.health <= 0 || p1Fell || p2.health <= 0 || p2Fell) && gameState === 'playing') {
               handleRoundFinish(p1.health <= 0 || p1Fell ? 2 : 1);
@@ -427,7 +512,7 @@ export default function App() {
     };
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [gameState, isPaused, mapIndex, gameMode, aiDifficulty, addScreenShake, showHitboxes]);
+  }, [gameState, isPaused, mapIndex, gameMode, onlineSlot, aiDifficulty, addScreenShake, showHitboxes]);
   const handleRoundFinish = (winnerSlot: 1 | 2) => {
     setRoundWinnerSlot(winnerSlot);
     setGameState('round_over');
