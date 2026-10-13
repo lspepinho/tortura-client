@@ -1,0 +1,8 @@
+{
+  "name": "Remix Supreme Stickman Duel: Arthur vs Lucas",
+  "description": "Jogo multiplayer 2D estilo Supreme Duelist Stickman estrelando Arthur e Lucas com poderes cômicos insanos, física ragdoll, modo local e salas privadas online.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
