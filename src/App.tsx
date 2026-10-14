@@ -34,7 +34,7 @@ import { ControlsGuideModal } from './components/ControlsGuideModal';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
 import { requestFullscreenLandscape, exitFullscreen, isFullscreenActive } from './utils/fullscreen';
 export default function App() {
-  const [gameState, setGameState] = useState<'menu' | 'char_select' | 'countdown' | 'playing' | 'round_over' | 'game_over'>('menu');
+  const [gameState, setGameState] = useState<'menu' | 'char_select' | 'countdown' | 'playing' | 'round_over' | 'fatality' | 'game_over'>('menu');
   const [gameMode, setGameMode] = useState<GameMode>('solo');
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>('facil');
   const [mapIndex, setMapIndex] = useState<number>(0);
@@ -45,6 +45,13 @@ export default function App() {
   const [p1Char, setP1Char] = useState<CharacterId>('arthur');
   const [p2Char, setP2Char] = useState<CharacterId>('lucas');
   const [roundWinnerSlot, setRoundWinnerSlot] = useState<1 | 2 | null>(null);
+  const [fatality, setFatality] = useState<{
+    winnerSlot: 1 | 2;
+    winnerName: string;
+    winnerChar: CharacterId;
+    loserName: string;
+  } | null>(null);
+  const fatalityTimerRef = useRef<number | null>(null);
   const [countdown, setCountdown] = useState<number>(3);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -224,11 +231,25 @@ export default function App() {
     });
     socket.on('match_over', ({ winnerSlot, room }) => {
       setRoundWinnerSlot(winnerSlot);
-      setGameState('game_over');
       const p1 = Object.values(room.players).find((p: any) => p.slot === 1) as any;
       const p2 = Object.values(room.players).find((p: any) => p.slot === 2) as any;
       if (p1) setP1Wins(p1.score);
       if (p2) setP2Wins(p2.score);
+      const wRef = winnerSlot === 1 ? p1Ref.current : p2Ref.current;
+      const lRef = winnerSlot === 1 ? p2Ref.current : p1Ref.current;
+      setFatality({
+        winnerSlot,
+        winnerName: wRef.name,
+        winnerChar: wRef.character,
+        loserName: lRef.name,
+      });
+      setGameState('fatality');
+      sounds.playVictory();
+      if (fatalityTimerRef.current) window.clearTimeout(fatalityTimerRef.current);
+      fatalityTimerRef.current = window.setTimeout(() => {
+        setFatality(null);
+        setGameState('game_over');
+      }, 3000);
     });
     return () => {
       socket.disconnect();
@@ -570,7 +591,20 @@ export default function App() {
     const matchFinished = newP1Score >= needed || newP2Score >= needed;
     setTimeout(() => {
       if (matchFinished) {
-        setGameState('game_over');
+        const wRef = winnerSlot === 1 ? p1Ref.current : p2Ref.current;
+        const lRef = winnerSlot === 1 ? p2Ref.current : p1Ref.current;
+        setFatality({
+          winnerSlot,
+          winnerName: wRef.name,
+          winnerChar: wRef.character,
+          loserName: lRef.name,
+        });
+        setGameState('fatality');
+        if (fatalityTimerRef.current) window.clearTimeout(fatalityTimerRef.current);
+        fatalityTimerRef.current = window.setTimeout(() => {
+          setFatality(null);
+          setGameState('game_over');
+        }, 3000);
       } else {
         setRound((r) => r + 1);
         setMapIndex((m) => (m + 1) % ARENAS.length);
@@ -650,6 +684,8 @@ export default function App() {
     socketRef.current?.emit('start_match', { mapIndex, maxRounds });
   };
   const handleRematch = () => {
+    if (fatalityTimerRef.current) window.clearTimeout(fatalityTimerRef.current);
+    setFatality(null);
     setP1Wins(0);
     setP2Wins(0);
     setRound(1);
@@ -982,6 +1018,27 @@ export default function App() {
         showHitboxes={showHitboxes}
         onToggleHitboxes={() => setShowHitboxes((p) => !p)}
       />
+      {}
+      {gameState === 'fatality' && fatality && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/80 overflow-hidden">
+          <div
+            className="absolute inset-0 animate-ping"
+            style={{ background: 'radial-gradient(ellipse at center, rgba(220,38,38,0.35) 0%, transparent 70%)' }}
+          />
+          <span className="text-7xl sm:text-8xl mb-2 animate-bounce">💀</span>
+          <h2 className="text-6xl sm:text-8xl font-black text-red-600 drop-shadow-[0_0_25px_rgba(220,38,38,0.9)] tracking-tight animate-ping">
+            FATALITY
+          </h2>
+          <p className="mt-4 text-xl sm:text-2xl font-black uppercase tracking-widest text-white">
+            <span style={{ color: CHARACTERS[fatality.winnerChar].color }}>{fatality.winnerName}</span>
+            <span className="text-neutral-400"> executou </span>
+            <span className="text-red-400">{fatality.loserName}</span>
+          </p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-widest text-neutral-500">
+            {CHARACTERS[fatality.winnerChar].name} • {CHARACTERS[fatality.winnerChar].title}
+          </p>
+        </div>
+      )}
       {}
       {gameState === 'game_over' && (
         <MatchOverModal
