@@ -74,6 +74,7 @@ export default function App() {
     isGrounded: boolean;
   } | null>(null);
   const lastSnapshotSentRef = useRef<number>(0);
+  const roundFinishSentRef = useRef<number>(0);
   const physAccumRef = useRef<number>(0);
   const lastFrameTimeRef = useRef<number>(0);
   const sessionRef = useRef<{ code: string | null; name: string; character: 'arthur' | 'lucas'; slot: 1 | 2 }>({
@@ -193,6 +194,7 @@ export default function App() {
     });
     socket.on('round_start', ({ round: nextRound, mapIndex: nextMap, players }) => {
       remoteSnapshotRef.current = null;
+      roundFinishSentRef.current = 0;
       setRound(nextRound);
       setMapIndex(nextMap);
       const playerList = Object.values(players) as any[];
@@ -367,6 +369,7 @@ export default function App() {
       ? `${finalChar2 === 'arthur' ? 'Arthur' : 'Lucas'} (Bot)`
       : (finalChar2 === 'arthur' ? 'Arthur' : 'Lucas');
     remoteSnapshotRef.current = null;
+    roundFinishSentRef.current = 0;
     physAccumRef.current = 0;
     p1Ref.current = createFighter(1, char1, p1Name, arena.spawnP1);
     p2Ref.current = createFighter(2, finalChar2, p2Name, arena.spawnP2);
@@ -548,6 +551,14 @@ export default function App() {
     return () => cancelAnimationFrame(animId);
   }, [gameState, isPaused, mapIndex, gameMode, onlineSlot, aiDifficulty, addScreenShake, showHitboxes]);
   const handleRoundFinish = (winnerSlot: 1 | 2) => {
+    if (gameMode === 'online') {
+      const nowMs = Date.now();
+      if (nowMs - roundFinishSentRef.current > 2000) {
+        roundFinishSentRef.current = nowMs;
+        socketRef.current?.emit('round_finished', { winnerSlot });
+      }
+      return;
+    }
     setRoundWinnerSlot(winnerSlot);
     setGameState('round_over');
     sounds.playVictory();
@@ -555,10 +566,6 @@ export default function App() {
     const newP2Score = winnerSlot === 2 ? p2Wins + 1 : p2Wins;
     setP1Wins(newP1Score);
     setP2Wins(newP2Score);
-    if (gameMode === 'online' && socketRef.current && onlineSlot === 1) {
-      socketRef.current.emit('round_finished', { winnerSlot });
-      return;
-    }
     const needed = Math.ceil(maxRounds / 2);
     const matchFinished = newP1Score >= needed || newP2Score >= needed;
     setTimeout(() => {
