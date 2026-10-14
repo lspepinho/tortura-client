@@ -26,7 +26,7 @@ export function createFighter(
     charConfig.powers[2].cooldown,
     charConfig.powers[3].cooldown,
   ];
-  const baseHealth = characterId === 'arthur' ? 115 : 95;
+  const baseHealth = characterId === 'arthur' ? 105 : 95;
   return {
     slot,
     name,
@@ -551,7 +551,7 @@ export function triggerPower(
           y: fighter.y - 45,
           width: 80,
           height: 70,
-          damagePerSec: 16,
+          damagePerSec: 12,
           color: '#f97316',
           lifetime: 2.5,
           ownerSlot: fighter.slot,
@@ -559,7 +559,7 @@ export function triggerPower(
         });
         const blastDist = Math.hypot(target.x - (fighter.x - aimCos * 40), target.y - fighter.y);
         if (blastDist < 95) {
-          applyDamage(target, 18, -aimCos * 18, -10, addScreenShake, floatingTexts, particles);
+          applyDamage(target, 15, -aimCos * 16, -10, addScreenShake, floatingTexts, particles);
           spawnFloatingText(floatingTexts, target.x, target.y - 65, 'EXPLODIDO PELO PEIDO!', '#f97316');
         }
         for (let i = 0; i < 24; i++) {
@@ -591,8 +591,8 @@ export function triggerPower(
           vx: aimCos * speed,
           vy: aimSin * speed - 2.5,
           radius: 12,
-          damage: 16,
-          knockback: 16,
+          damage: 12,
+          knockback: 14,
           ownerSlot: fighter.slot,
           lifetime: 3.2,
           maxLifetime: 3.2,
@@ -609,8 +609,8 @@ export function triggerPower(
         fighter.attackTimer = 0.65;
         fighter.angularVelocity = fighter.facing * 0.4;
         const dist = Math.hypot(fighter.x - target.x, fighter.y - target.y);
-        if (dist < 130) {
-          applyDamage(target, 26, fighter.facing * 18, -11, addScreenShake, floatingTexts, particles);
+        if (dist < 115) {
+          applyDamage(target, 22, fighter.facing * 16, -11, addScreenShake, floatingTexts, particles);
           target.isStunned = true;
           target.stunTimer = 0.5;
           target.status.slowTimer = 1.5;
@@ -633,7 +633,7 @@ export function triggerPower(
         const punchY = fighter.y - 28 + aimSin * 40;
         const dist = Math.hypot(punchX - target.x, punchY - target.y);
         if (dist < 105) {
-          applyDamage(target, 22, aimCos * 26, aimSin * 16 - 8, addScreenShake, floatingTexts, particles);
+          applyDamage(target, 24, aimCos * 26, aimSin * 16 - 8, addScreenShake, floatingTexts, particles);
           target.isStunned = true;
           target.stunTimer = 0.4;
           spawnFloatingText(floatingTexts, target.x, target.y - 65, 'SUPER SOCO! 💪', '#ef4444');
@@ -751,7 +751,7 @@ export function updateProjectiles(
       const ky = proj.vy * 0.4 - 4;
       applyDamage(target, proj.damage, kx, ky, addScreenShake, floatingTexts, particles);
       if (proj.type === 'radioactive_bomb') {
-        target.status.radioactiveTimer = 4.0;
+        target.status.radioactiveTimer = 2.5;
         sounds.playRadioactiveSplat();
       } else if (proj.type === 'fat_glob') {
         target.status.slowTimer = 1.8;
@@ -803,9 +803,9 @@ export function updateProjectiles(
             y: isVertical ? proj.y - 10 : plat.y - 12,
             width: 90,
             height: 22,
-            damagePerSec: 18,
+            damagePerSec: 12,
             color: '#22c55e',
-            lifetime: 5.0,
+            lifetime: 3.5,
             ownerSlot: proj.ownerSlot,
             type: 'radioactive_pool',
           });
@@ -939,7 +939,7 @@ export function applyDamage(
   floatingTexts: FloatingText[],
   particles: Particle[]
 ) {
-  const knockMod = victim.character === 'arthur' ? 0.85 : 1.0;
+  const knockMod = victim.character === 'arthur' ? 0.92 : 1.0;
   if (canDamage(victim.slot)) {
     victim.health = Math.max(0, victim.health - amount);
   }
