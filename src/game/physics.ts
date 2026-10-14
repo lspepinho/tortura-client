@@ -26,7 +26,7 @@ export function createFighter(
     charConfig.powers[2].cooldown,
     charConfig.powers[3].cooldown,
   ];
-  const baseHealth = characterId === 'arthur' ? 90 : 105;
+  const baseHealth = characterId === 'arthur' ? 90 : 110;
   return {
     slot,
     name,
